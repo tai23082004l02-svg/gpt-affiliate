@@ -4,6 +4,22 @@ Công cụ web tiếng Việt cho một chủ sở hữu: tải video một lầ
 
 **Chưa kết nối tài khoản thì công cụ không thể đăng thật.** Đây là ứng dụng Node.js có máy chủ, không chạy bằng GitHub Pages. Việc đẩy mã lên GitHub không tự triển khai website.
 
+## Triển khai bản miễn phí trên Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Ftai23082004l02-svg%2Fgpt-affiliate%2Ftree%2Fcodex%2Faffiliate-studio-20261027)
+
+1. Bấm **Deploy to Render**, đăng nhập/tạo tài khoản Render, cho phép đọc repository nếu được yêu cầu. Blueprint `render.yaml` dùng **plan: free**, không khai báo ổ đĩa hoặc dịch vụ trả phí. Kiểm tra trang xác nhận vẫn là Free trước khi tạo.
+2. Tạo Blueprint/service. Render build Docker image (Node 24 + FFmpeg), tự cấp tên miền HTTPS `.onrender.com` và tự tạo `ADMIN_PASSWORD` ngẫu nhiên. Không cần điền `APP_URL`: ứng dụng lấy `RENDER_EXTERNAL_URL` do Render cung cấp.
+3. Khi trạng thái **Live**, mở URL service. Tên đăng nhập là `admin`; mật khẩu lấy từ **Render Dashboard → service → Environment → ADMIN_PASSWORD**. Không gửi mật khẩu vào chat. Health check `/healthz` chỉ trả readiness, giao diện/API còn lại yêu cầu đăng nhập.
+4. Thêm thông tin OAuth cần dùng vào Environment của Render (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`), rồi restart/deploy. Không bắt buộc cấu hình cả ba kênh. Callback là `https://<service>.onrender.com/oauth/<youtube|facebook|tiktok>/callback`; dùng đúng URL thực tế hiển thị trên giao diện.
+5. Kết nối tài khoản và thử video riêng tư/nháp trước khi chủ động chọn đăng công khai. Facebook Reels đăng công khai trên Trang.
+
+**Giới hạn đã biết của Render Free:** dịch vụ ngủ sau khoảng 15 phút không có request, mở lại có thể chờ khoảng một phút; filesystem tạm bị xóa khi restart/redeploy/spin-down. **Video, lịch sử, token và kết nối sẽ mất**, cần tải lại/kết nối lại. Giữ bản gốc video trên thiết bị và kiểm tra bài trên các kênh trước khi gửi lại; idempotency chỉ tồn tại khi dữ liệu còn. Không phù hợp để lên lịch/đăng tự động không giám sát. Giao diện hiển thị cảnh báo này khi `EPHEMERAL_STORAGE=true`.
+
+Hạn mức giờ miễn phí dùng chung workspace (tài liệu hiện tại: 750 giờ/tháng), băng thông/build và điều kiện đăng ký tùy Render; không bảo đảm miễn phí không giới hạn hoặc luôn không cần xác minh tài khoản. Không chuyển sang gói trả phí nếu chưa có sự đồng ý của chủ tài khoản. Xem [giới hạn Free](https://render.com/docs/free).
+
+Blueprint triển khai từ nhánh `codex/affiliate-studio-20261027` đang có mã, tự deploy khi push được tắt để không ngắt upload. Sau khi merge vào main, đổi branch của service nếu muốn. Việc có file Blueprint/nút triển khai chưa tạo service hoặc URL công khai: cần tài khoản Render xác thực và xác nhận tạo service trong Dashboard.
+
 ## Bắt đầu
 
 Cần **Node.js 24.5+**, npm và **FFmpeg/ffprobe** trong PATH. Không có thư viện npm ngoài, không cần `npm install` hoặc cơ sở dữ liệu.
@@ -70,10 +86,10 @@ Khai báo nội dung thương mại gửi sang YouTube (`hasPaidProductPlacement
 
 ## Chạy trên máy chủ / dùng từ điện thoại
 
-Chạy trên máy luôn bật có ổ đĩa bền vững. Ứng dụng này dành cho **một chủ sở hữu**, không phải SaaS nhiều người dùng. Giữ `HOST=127.0.0.1`; đặt reverse proxy HTTPS phía trước nếu muốn mở từ điện thoại. GitHub Pages không thể chạy backend này.
+Chạy trên máy luôn bật có ổ đĩa bền vững. Ứng dụng này dành cho **một chủ sở hữu**, không phải SaaS nhiều người dùng. Khi tự chạy trên VPS, giữ `HOST=127.0.0.1`; đặt reverse proxy HTTPS phía trước nếu muốn mở từ điện thoại. GitHub Pages không thể chạy backend này.
 
 - Đặt `APP_URL=https://ten-mien-cua-ban.example` và `ADMIN_PASSWORD` ngẫu nhiên **ít nhất 20 ký tự**; tên đăng nhập Basic Auth là `admin`. Server từ chối khởi động với domain ngoài nếu thiếu HTTPS/mật khẩu. Nên đặt mật khẩu cả khi dùng localhost.
-- Proxy cần giữ `Host` đúng domain `APP_URL`, chuyển toàn bộ đường dẫn (kể cả `/oauth/*`) về port 3100, giới hạn body khoảng 270 MB và timeout upload tối thiểu 600 giây. Không expose trực tiếp cổng Node ra Internet. Không dùng domain dùng chung cho nội dung không tin cậy.
+- Proxy cần giữ `Host` đúng domain `APP_URL`, chuyển toàn bộ đường dẫn (kể cả `/oauth/*`) về port 3100, giới hạn body khoảng 270 MB và timeout upload tối thiểu 600 giây. Không expose trực tiếp cổng Node ra Internet. Render/Docker dùng `HOST=0.0.0.0` trong mạng container với `ALLOW_PUBLIC_BIND=true`, bắt buộc APP_URL HTTPS và mật khẩu đủ mạnh; Render quản lý proxy TLS phía trước. Không dùng domain dùng chung cho nội dung không tin cậy.
 - Đổi các redirect URI trong ba developer console tương ứng domain HTTPS này. Không đổi qua lại `localhost` và `127.0.0.1`; server kiểm tra Host/Origin.
 - Node chạy với `--use-env-proxy`, giữ HTTP(S)_PROXY và CA trust của môi trường cloud. TLS/checksum verification không bị tắt. Mạng cần các endpoint OAuth/API: `accounts.google.com`, `oauth2.googleapis.com`, `www.googleapis.com`, `www.facebook.com`, `graph.facebook.com`, `rupload.facebook.com`, `www.tiktok.com`, `open.tiktokapis.com`, `open-upload.tiktokapis.com` và host upload vùng do TikTok trả về như `upload.us.tiktokapis.com`. Với mạng restricted, chỉ thêm đúng host bị chặn qua cài đặt môi trường.
 - Không bật log URL callback, body OAuth, token hoặc URL upload có chữ ký ở reverse proxy. Dùng HTTPS cho mọi người truy cập từ xa.

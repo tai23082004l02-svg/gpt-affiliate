@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: gpt-affiliate-studio
+    runtime: docker
+    plan: free
+    branch: codex/affiliate-studio-20261027
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeployTrigger: "off"
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: ALLOW_PUBLIC_BIND
+        value: "true"
+      - key: PORT
+        value: "10000"
+      - key: EPHEMERAL_STORAGE
+        value: "true"
+      - key: DATA_DIR
+        value: /app/.data
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: TIKTOK_DIRECT_POST_ENABLED
+        value: "false"
+      - key: META_GRAPH_VERSION
+        value: v26.0

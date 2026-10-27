@@ -211,3 +211,24 @@ test('OAuth exchanges a code server-side and only exposes account/page labels', 
   const chosen = await app.post('/api/facebook/page', { pageId: 'page-42' }); assert.equal(chosen.status, 200); assert.equal(app.store.state.accounts.facebook.pageId, 'page-42');
   assert.equal((await app.post('/api/facebook/page', { pageId: 'unauthorized' })).status, 400);
 });
+
+test('Render uses its HTTPS hostname and public binding still requires explicit opt-in and strong password', async () => {
+  const { listenOptions } = await import('../src/server.js');
+  const hosted = { RENDER: 'true', RENDER_EXTERNAL_URL: 'https://studio-example.onrender.com', HOST: '0.0.0.0', PORT: '10000', ALLOW_PUBLIC_BIND: 'true', ADMIN_PASSWORD: 'test-password-at-least-twenty-characters' };
+  assert.equal(configuration(hosted).appUrl, hosted.RENDER_EXTERNAL_URL);
+  assert.deepEqual(listenOptions(hosted), { host: '0.0.0.0', port: 10000 });
+  for (const patch of [{ ALLOW_PUBLIC_BIND: '' }, { ADMIN_PASSWORD: '' }, { APP_URL: 'http://localhost:10000' }, { PORT: 'NaN' }]) assert.throws(() => listenOptions({ ...hosted, ...patch }));
+});
+
+test('public health probe exposes only readiness while the app requires Basic authentication', async t => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'affiliate-auth-'));
+  const password = 'test-admin-password-at-least-twenty-characters';
+  const app = await createApp({ env: { DATA_DIR: directory, ADMIN_PASSWORD: password } });
+  app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+  const base = `http://127.0.0.1:${app.server.address().port}`; app.providers.config.appUrl = base;
+  t.after(async () => { await app.close(); await rm(directory, { recursive: true, force: true }); });
+  const health = await fetch(base + '/healthz'); assert.equal(health.status, 200); assert.deepEqual(await health.json(), { status: 'ok' });
+  assert.equal((await fetch(base + '/')).status, 401);
+  assert.equal((await fetch(base + '/api/status')).status, 401);
+  const authorized = await fetch(base + '/api/status', { headers: { Authorization: 'Basic ' + Buffer.from('admin:' + password).toString('base64') } }); assert.equal(authorized.status, 200);
+});

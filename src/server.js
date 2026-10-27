@@ -73,6 +73,8 @@ export async function createApp({ env = process.env, fetcher = fetch, probe = in
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self' blob:; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'");
     try {
+      // Hosting health probes contain no user data and do not need account credentials.
+      if (req.method === 'GET' && req.url === '/healthz') return send(res, 200, { status: 'ok' });
       if (req.headers.host !== new URL(config.appUrl).host) throw httpError(403, 'Host không hợp lệ. Dùng đúng APP_URL.');
       if (env.ADMIN_PASSWORD) {
         const expected = createHash('sha256').update('Basic ' + Buffer.from(`admin:${env.ADMIN_PASSWORD}`).toString('base64')).digest();
@@ -88,7 +90,7 @@ export async function createApp({ env = process.env, fetcher = fetch, probe = in
           const a = store.state.accounts[p];
           accounts[p] = { configured: configured(config, p), connected: Boolean(a), label: a?.label, pageId: a?.pageId, pages: a?.pages?.map(v => ({ id: v.id, name: v.name })) || [] };
         }
-        return send(res, 200, { accounts, tiktokMode: config.direct ? 'direct' : 'inbox', callbacks: Object.fromEntries(PLATFORMS.map(p => [p, `${config.appUrl}/oauth/${p}/callback`])), maxVideoMB: MAX_VIDEO / 1024 / 1024 });
+        return send(res, 200, { accounts, tiktokMode: config.direct ? 'direct' : 'inbox', callbacks: Object.fromEntries(PLATFORMS.map(p => [p, `${config.appUrl}/oauth/${p}/callback`])), maxVideoMB: MAX_VIDEO / 1024 / 1024, storageEphemeral: env.EPHEMERAL_STORAGE === 'true' });
       }
       if (req.method === 'POST' && /^\/api\/connect\/(youtube|facebook|tiktok)$/.test(route)) {
         assertIdle(); const p = route.split('/').at(-1);
@@ -217,9 +219,15 @@ export async function createApp({ env = process.env, fetcher = fetch, probe = in
   server.requestTimeout = 10 * 60 * 1000;
   return { server, store, providers, async close() { await Promise.allSettled([...running, ...refreshing.values()]); await new Promise(resolve => server.close(resolve)); await store.chain; } };
 }
+export function listenOptions(env = process.env) {
+  const config = configuration(env), host = env.HOST || '127.0.0.1', port = Number(env.PORT || 3100);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT không hợp lệ.');
+  const local = ['127.0.0.1', '::1', 'localhost'].includes(host);
+  if (!local && !(host === '0.0.0.0' && env.ALLOW_PUBLIC_BIND === 'true' && config.appUrl.startsWith('https:') && (env.ADMIN_PASSWORD || '').length >= 20)) throw new Error('HOST ngoài loopback cần ALLOW_PUBLIC_BIND=true, APP_URL HTTPS và ADMIN_PASSWORD ít nhất 20 ký tự.');
+  return { host, port };
+}
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const app = await createApp(); const port = Number(process.env.PORT || 3100), host = process.env.HOST || '127.0.0.1';
-  if (!['127.0.0.1', '::1', 'localhost'].includes(host)) throw new Error('HOST phải là loopback. Dùng reverse proxy HTTPS có bảo vệ nếu triển khai bên ngoài.');
+  const { host, port } = listenOptions(); const app = await createApp();
   app.server.listen(port, host, () => console.log(`Affiliate Studio: ${configuration(process.env).appUrl}`));
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => { app.server.close(); app.close().then(() => process.exit(0)); });
 }

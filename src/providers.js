@@ -7,7 +7,7 @@ const SCOPES = {
   facebook: 'pages_show_list,pages_read_engagement,pages_manage_posts',
 };
 export function configuration(env) {
-  const appUrl = (env.APP_URL || `http://localhost:${env.PORT || 3100}`).replace(/\/$/, '');
+  const appUrl = (env.APP_URL || (env.RENDER === 'true' && env.RENDER_EXTERNAL_URL) || `http://localhost:${env.PORT || 3100}`).replace(/\/$/, '');
   const base = new URL(appUrl);
   if (base.pathname !== '/' || base.search || base.hash || base.username || base.password || !['http:', 'https:'].includes(base.protocol)) throw new Error('APP_URL phải là origin HTTP(S), không kèm đường dẫn.');
   if (!['localhost', '127.0.0.1'].includes(base.hostname) && (base.protocol !== 'https:' || (env.ADMIN_PASSWORD || '').length < 20)) throw new Error('Tên miền công khai cần HTTPS và ADMIN_PASSWORD ít nhất 20 ký tự.');

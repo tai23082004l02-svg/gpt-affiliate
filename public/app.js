@@ -17,6 +17,7 @@ function button(text, fn, className = 'subtle') { const b = el('button', text, c
 function selectedPlatforms() { return [...document.querySelectorAll('#targets input:checked')].map(n => n.value); }
 async function loadStatus() {
   status = await api('/api/status');
+  $('hosting-note').hidden = !status.storageEphemeral;
   const previouslySelected = selectedPlatforms();
   $('connections').replaceChildren(); $('targets').replaceChildren(); $('callbacks').replaceChildren();
   for (const [p, a] of Object.entries(status.accounts)) {
